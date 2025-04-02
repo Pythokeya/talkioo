@@ -4,16 +4,6 @@ import { Button } from "@/components/ui/button";
 export default function Welcome() {
   return (
     <div className="flex flex-col min-h-screen bg-white items-center justify-between px-4">
-      {/* Status bar mockup for mobile appearance */}
-      <div className="w-full max-w-sm pt-6 flex justify-between items-center">
-        <span className="text-gray-600 text-sm">12:00</span>
-        <div className="flex items-center space-x-1">
-          <span className="material-icons text-gray-600 text-sm">network_wifi</span>
-          <span className="material-icons text-gray-600 text-sm">signal_cellular_alt</span>
-          <span className="material-icons text-gray-600 text-sm">battery_full</span>
-        </div>
-      </div>
-      
       {/* Main content */}
       <div className="flex-1 flex flex-col items-center justify-center w-full max-w-sm py-8">
         {/* App logo */}
@@ -33,13 +23,7 @@ export default function Welcome() {
         
         {/* App preview image */}
         <div className="relative w-64 h-80 bg-gray-50 rounded-3xl shadow-lg mb-10 overflow-hidden">
-          <div className="h-12 w-full bg-primary rounded-t-xl flex items-center px-4">
-            <div className="w-8 h-1 bg-white rounded-full"></div>
-            <div className="flex-1"></div>
-            <span className="material-icons text-white text-lg">search</span>
-          </div>
-          
-          <div className="p-2 flex flex-col space-y-2">
+          <div className="pt-4 p-2 flex flex-col space-y-2">
             {/* Chat preview items */}
             {[1, 2, 3, 4, 5].map((item) => (
               <div key={item} className="flex items-center p-2 rounded-lg">
