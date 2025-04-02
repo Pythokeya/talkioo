@@ -17,8 +17,8 @@ export default function Welcome() {
       {/* Main content */}
       <div className="flex-1 flex flex-col items-center justify-center w-full max-w-sm py-8">
         {/* App logo */}
-        <div className="w-16 h-16 rounded-xl bg-primary flex items-center justify-center mb-6">
-          <span className="material-icons text-white text-2xl">tag</span>
+        <div className="w-24 h-24 flex items-center justify-center mb-6">
+          <img src="https://i.ibb.co/0RgKY1dD/output.png" alt="Talkio Logo" className="w-full h-full object-contain" />
         </div>
         
         {/* Welcome text */}
@@ -72,7 +72,7 @@ export default function Welcome() {
       </div>
       
       {/* Button area */}
-      <div className="w-full max-w-sm pb-20 space-y-3">
+      <div className="w-full max-w-sm pb-20 space-y-6">
         <Link href="/login">
           <Button className="w-full h-12 rounded-xl bg-primary hover:bg-primary/90 text-white text-lg font-medium">
             Log in
@@ -94,7 +94,7 @@ export default function Welcome() {
       {/* Footer */}
       <div className="w-full py-4 border-t flex justify-between items-center px-4 text-sm text-gray-500">
         <div className="flex items-center">
-          <span className="material-icons text-primary mr-2 text-xl">tag</span>
+          <img src="https://i.ibb.co/0RgKY1dD/output.png" alt="Talkio Logo" className="w-6 h-6 mr-2" />
           <span className="font-medium">Talkio</span>
         </div>
         <div>
