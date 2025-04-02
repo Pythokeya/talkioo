@@ -24,6 +24,8 @@ import {
   type InsertBlockedUser,
   type InsertUserPreference,
 } from "@shared/schema";
+import { db } from "./db";
+import { eq, and, or, desc, isNull, asc } from "drizzle-orm";
 
 export interface IStorage {
   // User operations
@@ -71,125 +73,87 @@ export interface IStorage {
   updateUserPreferences(userId: number, updates: Partial<UserPreference>): Promise<UserPreference>;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<number, User>;
-  private friendships: Map<number, Friendship>;
-  private chatGroups: Map<number, ChatGroup>;
-  private groupMembers: Map<number, GroupMember>;
-  private messages: Map<number, Message>;
-  private messageReactions: Map<number, MessageReaction>;
-  private blockedUsers: Map<number, BlockedUser>;
-  private userPreferences: Map<number, UserPreference>;
-  
-  private userIdCounter: number;
-  private friendshipIdCounter: number;
-  private chatGroupIdCounter: number;
-  private groupMemberIdCounter: number;
-  private messageIdCounter: number;
-  private messageReactionIdCounter: number;
-  private blockedUserIdCounter: number;
-  private userPreferenceIdCounter: number;
-
-  constructor() {
-    this.users = new Map();
-    this.friendships = new Map();
-    this.chatGroups = new Map();
-    this.groupMembers = new Map();
-    this.messages = new Map();
-    this.messageReactions = new Map();
-    this.blockedUsers = new Map();
-    this.userPreferences = new Map();
-    
-    this.userIdCounter = 1;
-    this.friendshipIdCounter = 1;
-    this.chatGroupIdCounter = 1;
-    this.groupMemberIdCounter = 1;
-    this.messageIdCounter = 1;
-    this.messageReactionIdCounter = 1;
-    this.blockedUserIdCounter = 1;
-    this.userPreferenceIdCounter = 1;
-  }
-
+export class DatabaseStorage implements IStorage {
   // User operations
   async getUser(id: number): Promise<User | undefined> {
-    return this.users.get(id);
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
   }
 
   async getUserByUniqueId(uniqueId: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.uniqueId === uniqueId,
-    );
+    const [user] = await db.select().from(users).where(eq(users.uniqueId, uniqueId));
+    return user;
   }
 
   async createUser(userData: InsertUser): Promise<User> {
-    const id = this.userIdCounter++;
-    const now = new Date();
-    const user: User = { 
-      ...userData, 
-      id,
-      lastSeen: now
-    };
-    this.users.set(id, user);
+    const [user] = await db.insert(users).values(userData).returning();
     return user;
   }
 
   async updateUser(id: number, updates: Partial<User>): Promise<User> {
-    const user = await this.getUser(id);
-    if (!user) {
+    const [updatedUser] = await db
+      .update(users)
+      .set(updates)
+      .where(eq(users.id, id))
+      .returning();
+    
+    if (!updatedUser) {
       throw new Error(`User with id ${id} not found`);
     }
     
-    const updatedUser = { ...user, ...updates };
-    this.users.set(id, updatedUser);
     return updatedUser;
   }
 
   async setUserOnlineStatus(id: number, isOnline: boolean): Promise<void> {
-    const user = await this.getUser(id);
-    if (!user) {
-      throw new Error(`User with id ${id} not found`);
-    }
-    
     const now = new Date();
-    const updatedUser = { 
-      ...user, 
-      isOnline, 
-      lastSeen: now 
-    };
-    this.users.set(id, updatedUser);
+    await db
+      .update(users)
+      .set({ isOnline, lastSeen: now })
+      .where(eq(users.id, id));
   }
 
   // Friendship operations
   async createFriendRequest(friendshipData: InsertFriendship): Promise<Friendship> {
-    const id = this.friendshipIdCounter++;
-    const now = new Date();
-    const friendship: Friendship = {
-      ...friendshipData,
-      id,
-      status: 'pending',
-      createdAt: now,
-    };
-    this.friendships.set(id, friendship);
+    const [friendship] = await db
+      .insert(friendships)
+      .values({
+        ...friendshipData,
+        status: 'pending'
+      })
+      .returning();
+    
     return friendship;
   }
 
   async getFriendRequestsByUserId(userId: number): Promise<Friendship[]> {
-    return Array.from(this.friendships.values()).filter(
-      (friendship) => friendship.userId === userId || friendship.friendId === userId
-    );
+    return await db
+      .select()
+      .from(friendships)
+      .where(or(
+        eq(friendships.userId, userId),
+        eq(friendships.friendId, userId)
+      ));
   }
 
   async getFriendRequests(userId: number): Promise<(Friendship & { user: User })[]> {
-    const friendRequests = Array.from(this.friendships.values()).filter(
-      (friendship) => friendship.friendId === userId && friendship.status === 'pending'
-    );
+    const pendingRequests = await db
+      .select()
+      .from(friendships)
+      .where(and(
+        eq(friendships.friendId, userId),
+        eq(friendships.status, 'pending')
+      ));
     
     const requestsWithUserInfo = await Promise.all(
-      friendRequests.map(async (request) => {
-        const user = await this.getUser(request.userId);
+      pendingRequests.map(async (request) => {
+        const [user] = await db
+          .select()
+          .from(users)
+          .where(eq(users.id, request.userId));
+        
         return {
           ...request,
-          user: user!
+          user
         };
       })
     );
@@ -198,167 +162,214 @@ export class MemStorage implements IStorage {
   }
 
   async updateFriendshipStatus(id: number, status: 'accepted' | 'declined'): Promise<Friendship> {
-    const friendship = this.friendships.get(id);
-    if (!friendship) {
+    const [updatedFriendship] = await db
+      .update(friendships)
+      .set({ status })
+      .where(eq(friendships.id, id))
+      .returning();
+    
+    if (!updatedFriendship) {
       throw new Error(`Friendship with id ${id} not found`);
     }
     
-    const updatedFriendship = { ...friendship, status };
-    this.friendships.set(id, updatedFriendship);
     return updatedFriendship;
   }
 
   async getFriends(userId: number): Promise<User[]> {
-    const friendships = Array.from(this.friendships.values()).filter(
-      (friendship) => 
-        (friendship.userId === userId || friendship.friendId === userId) && 
-        friendship.status === 'accepted'
-    );
+    const userFriendships = await db
+      .select()
+      .from(friendships)
+      .where(and(
+        or(
+          eq(friendships.userId, userId),
+          eq(friendships.friendId, userId)
+        ),
+        eq(friendships.status, 'accepted')
+      ));
     
-    const friendIds = friendships.map(friendship => 
+    const friendUserIds = userFriendships.map(friendship => 
       friendship.userId === userId ? friendship.friendId : friendship.userId
     );
     
-    const friends = await Promise.all(
-      friendIds.map(async (friendId) => {
-        const user = await this.getUser(friendId);
-        return user!;
+    if (friendUserIds.length === 0) {
+      return [];
+    }
+    
+    // Get all the friend users
+    const friendUsers = await Promise.all(
+      friendUserIds.map(async (friendId) => {
+        const [user] = await db
+          .select()
+          .from(users)
+          .where(eq(users.id, friendId));
+        return user;
       })
     );
     
-    return friends;
+    return friendUsers.filter(Boolean) as User[];
   }
 
   async isFriend(userId: number, friendId: number): Promise<boolean> {
-    const friendship = Array.from(this.friendships.values()).find(
-      (friendship) => 
-        ((friendship.userId === userId && friendship.friendId === friendId) || 
-        (friendship.userId === friendId && friendship.friendId === userId)) &&
-        friendship.status === 'accepted'
-    );
+    const [friendship] = await db
+      .select()
+      .from(friendships)
+      .where(and(
+        or(
+          and(
+            eq(friendships.userId, userId),
+            eq(friendships.friendId, friendId)
+          ),
+          and(
+            eq(friendships.userId, friendId),
+            eq(friendships.friendId, userId)
+          )
+        ),
+        eq(friendships.status, 'accepted')
+      ));
     
     return !!friendship;
   }
 
   // Chat group operations
   async createChatGroup(groupData: InsertChatGroup): Promise<ChatGroup> {
-    const id = this.chatGroupIdCounter++;
-    const now = new Date();
-    const group: ChatGroup = {
-      ...groupData,
-      id,
-      createdAt: now,
-    };
-    this.chatGroups.set(id, group);
+    const [group] = await db
+      .insert(chatGroups)
+      .values(groupData)
+      .returning();
+    
     return group;
   }
 
   async getChatGroupById(id: number): Promise<ChatGroup | undefined> {
-    return this.chatGroups.get(id);
+    const [group] = await db
+      .select()
+      .from(chatGroups)
+      .where(eq(chatGroups.id, id));
+    
+    return group;
   }
 
   async getChatGroupsByUserId(userId: number): Promise<ChatGroup[]> {
-    const userGroupMemberships = Array.from(this.groupMembers.values()).filter(
-      (member) => member.userId === userId
-    );
+    const userMemberships = await db
+      .select()
+      .from(groupMembers)
+      .where(eq(groupMembers.userId, userId));
+    
+    if (userMemberships.length === 0) {
+      return [];
+    }
+    
+    const groupIds = userMemberships.map(member => member.groupId);
     
     const groups = await Promise.all(
-      userGroupMemberships.map(async (membership) => {
-        const group = await this.getChatGroupById(membership.groupId);
-        return group!;
+      groupIds.map(async (groupId) => {
+        const [group] = await db
+          .select()
+          .from(chatGroups)
+          .where(eq(chatGroups.id, groupId));
+        return group;
       })
     );
     
-    return groups;
+    return groups.filter(Boolean) as ChatGroup[];
   }
 
   async addUserToGroup(groupMemberData: InsertGroupMember): Promise<GroupMember> {
-    const id = this.groupMemberIdCounter++;
-    const now = new Date();
-    const groupMember: GroupMember = {
-      ...groupMemberData,
-      id,
-      joinedAt: now,
-    };
-    this.groupMembers.set(id, groupMember);
+    const [groupMember] = await db
+      .insert(groupMembers)
+      .values(groupMemberData)
+      .returning();
+    
     return groupMember;
   }
 
   async getGroupMembers(groupId: number): Promise<User[]> {
-    const memberships = Array.from(this.groupMembers.values()).filter(
-      (member) => member.groupId === groupId
-    );
+    const memberships = await db
+      .select()
+      .from(groupMembers)
+      .where(eq(groupMembers.groupId, groupId));
+    
+    if (memberships.length === 0) {
+      return [];
+    }
+    
+    const memberUserIds = memberships.map(membership => membership.userId);
     
     const members = await Promise.all(
-      memberships.map(async (membership) => {
-        const user = await this.getUser(membership.userId);
-        return user!;
+      memberUserIds.map(async (userId) => {
+        const [user] = await db
+          .select()
+          .from(users)
+          .where(eq(users.id, userId));
+        return user;
       })
     );
     
-    return members;
+    return members.filter(Boolean) as User[];
   }
 
   // Message operations
   async createMessage(messageData: InsertMessage): Promise<Message> {
-    const id = this.messageIdCounter++;
-    const now = new Date();
-    const message: Message = {
-      ...messageData,
-      id,
-      sentAt: now,
-      isRead: false,
-    };
-    this.messages.set(id, message);
+    const [message] = await db
+      .insert(messages)
+      .values({
+        ...messageData,
+        isRead: false
+      })
+      .returning();
+    
     return message;
   }
 
   async getMessagesBetweenUsers(userId: number, friendId: number, limit: number = 50): Promise<Message[]> {
-    const allMessages = Array.from(this.messages.values()).filter(
-      (message) => 
-        (message.senderId === userId && message.receiverId === friendId) || 
-        (message.senderId === friendId && message.receiverId === userId)
-    );
+    const userMessages = await db
+      .select()
+      .from(messages)
+      .where(and(
+        isNull(messages.groupId),
+        or(
+          and(
+            eq(messages.senderId, userId),
+            eq(messages.receiverId, friendId)
+          ),
+          and(
+            eq(messages.senderId, friendId),
+            eq(messages.receiverId, userId)
+          )
+        )
+      ))
+      .orderBy(asc(messages.sentAt))
+      .limit(limit);
     
-    // Sort by sent time, newest last
-    allMessages.sort((a, b) => {
-      return a.sentAt.getTime() - b.sentAt.getTime();
-    });
-    
-    // Return the most recent messages based on limit
-    return allMessages.slice(-limit);
+    return userMessages;
   }
 
   async getGroupMessages(groupId: number, limit: number = 50): Promise<Message[]> {
-    const groupMessages = Array.from(this.messages.values()).filter(
-      (message) => message.groupId === groupId
-    );
+    const groupMessages = await db
+      .select()
+      .from(messages)
+      .where(eq(messages.groupId, groupId))
+      .orderBy(asc(messages.sentAt))
+      .limit(limit);
     
-    // Sort by sent time, newest last
-    groupMessages.sort((a, b) => {
-      return a.sentAt.getTime() - b.sentAt.getTime();
-    });
-    
-    // Return the most recent messages based on limit
-    return groupMessages.slice(-limit);
+    return groupMessages;
   }
 
   async markMessageAsRead(messageId: number): Promise<void> {
-    const message = this.messages.get(messageId);
-    if (!message) {
-      throw new Error(`Message with id ${messageId} not found`);
-    }
-    
-    const updatedMessage = { ...message, isRead: true };
-    this.messages.set(messageId, updatedMessage);
+    await db
+      .update(messages)
+      .set({ isRead: true })
+      .where(eq(messages.id, messageId));
   }
 
   async getUnreadMessageCount(userId: number): Promise<number> {
-    const unreadMessages = Array.from(this.messages.values()).filter(
-      (message) => 
-        message.receiverId === userId && 
-        !message.isRead
-    );
+    const unreadMessages = await db
+      .select()
+      .from(messages)
+      .where(and(
+        eq(messages.receiverId, userId),
+        eq(messages.isRead, false)
+      ));
     
     return unreadMessages.length;
   }
@@ -366,117 +377,143 @@ export class MemStorage implements IStorage {
   // Message reaction operations
   async addReactionToMessage(reactionData: InsertMessageReaction): Promise<MessageReaction> {
     // Check if the reaction already exists
-    const existingReaction = Array.from(this.messageReactions.values()).find(
-      (reaction) => 
-        reaction.messageId === reactionData.messageId && 
-        reaction.userId === reactionData.userId &&
-        reaction.reaction === reactionData.reaction
-    );
+    const [existingReaction] = await db
+      .select()
+      .from(messageReactions)
+      .where(and(
+        eq(messageReactions.messageId, reactionData.messageId),
+        eq(messageReactions.userId, reactionData.userId),
+        eq(messageReactions.reaction, reactionData.reaction)
+      ));
     
     if (existingReaction) {
       return existingReaction;
     }
     
-    const id = this.messageReactionIdCounter++;
-    const now = new Date();
-    const reaction: MessageReaction = {
-      ...reactionData,
-      id,
-      createdAt: now,
-    };
-    this.messageReactions.set(id, reaction);
+    const [reaction] = await db
+      .insert(messageReactions)
+      .values(reactionData)
+      .returning();
+    
     return reaction;
   }
 
   async getMessageReactions(messageId: number): Promise<MessageReaction[]> {
-    return Array.from(this.messageReactions.values()).filter(
-      (reaction) => reaction.messageId === messageId
-    );
+    const reactions = await db
+      .select()
+      .from(messageReactions)
+      .where(eq(messageReactions.messageId, messageId));
+    
+    return reactions;
   }
 
   // Blocked user operations
   async blockUser(blockedData: InsertBlockedUser): Promise<BlockedUser> {
-    const id = this.blockedUserIdCounter++;
-    const now = new Date();
-    const blocked: BlockedUser = {
-      ...blockedData,
-      id,
-      createdAt: now,
-    };
-    this.blockedUsers.set(id, blocked);
+    const [blocked] = await db
+      .insert(blockedUsers)
+      .values(blockedData)
+      .returning();
+    
     return blocked;
   }
 
   async unblockUser(blockerId: number, blockedId: number): Promise<void> {
-    const blockedEntry = Array.from(this.blockedUsers.values()).find(
-      (blocked) => 
-        blocked.blockerId === blockerId && 
-        blocked.blockedId === blockedId
-    );
-    
-    if (blockedEntry) {
-      this.blockedUsers.delete(blockedEntry.id);
-    }
+    await db
+      .delete(blockedUsers)
+      .where(and(
+        eq(blockedUsers.blockerId, blockerId),
+        eq(blockedUsers.blockedId, blockedId)
+      ));
   }
 
   async getBlockedUsers(userId: number): Promise<User[]> {
-    const blockedEntries = Array.from(this.blockedUsers.values()).filter(
-      (blocked) => blocked.blockerId === userId
-    );
+    const blockedEntries = await db
+      .select()
+      .from(blockedUsers)
+      .where(eq(blockedUsers.blockerId, userId));
+    
+    if (blockedEntries.length === 0) {
+      return [];
+    }
+    
+    const blockedUserIds = blockedEntries.map(entry => entry.blockedId);
     
     const blockedUsers = await Promise.all(
-      blockedEntries.map(async (entry) => {
-        const user = await this.getUser(entry.blockedId);
-        return user!;
+      blockedUserIds.map(async (blockedId) => {
+        const [user] = await db
+          .select()
+          .from(users)
+          .where(eq(users.id, blockedId));
+        return user;
       })
     );
     
-    return blockedUsers;
+    return blockedUsers.filter(Boolean) as User[];
   }
 
   async isBlocked(userId: number, otherUserId: number): Promise<boolean> {
-    const blockedEntry = Array.from(this.blockedUsers.values()).find(
-      (blocked) => 
-        (blocked.blockerId === userId && blocked.blockedId === otherUserId) || 
-        (blocked.blockerId === otherUserId && blocked.blockedId === userId)
-    );
+    const [blockedEntry] = await db
+      .select()
+      .from(blockedUsers)
+      .where(or(
+        and(
+          eq(blockedUsers.blockerId, userId),
+          eq(blockedUsers.blockedId, otherUserId)
+        ),
+        and(
+          eq(blockedUsers.blockerId, otherUserId),
+          eq(blockedUsers.blockedId, userId)
+        )
+      ));
     
     return !!blockedEntry;
   }
 
   // User preferences operations
   async getUserPreferences(userId: number): Promise<UserPreference | undefined> {
-    return Array.from(this.userPreferences.values()).find(
-      (prefs) => prefs.userId === userId
-    );
+    const [prefs] = await db
+      .select()
+      .from(userPreferences)
+      .where(eq(userPreferences.userId, userId));
+    
+    return prefs;
   }
 
   async setUserPreferences(prefsData: InsertUserPreference): Promise<UserPreference> {
-    const id = this.userPreferenceIdCounter++;
-    const prefs: UserPreference = {
-      ...prefsData,
-      id,
-    };
-    this.userPreferences.set(id, prefs);
+    const [prefs] = await db
+      .insert(userPreferences)
+      .values(prefsData)
+      .returning();
+    
     return prefs;
   }
 
   async updateUserPreferences(userId: number, updates: Partial<UserPreference>): Promise<UserPreference> {
-    let prefs = await this.getUserPreferences(userId);
+    // Check if preferences exist
+    const [existingPrefs] = await db
+      .select()
+      .from(userPreferences)
+      .where(eq(userPreferences.userId, userId));
     
-    if (!prefs) {
+    if (!existingPrefs) {
       // Create default preferences first
-      prefs = await this.setUserPreferences({
+      return this.setUserPreferences({
         userId,
         chatTheme: 'default',
         notificationsEnabled: true,
+        ...updates
       });
     }
     
-    const updatedPrefs = { ...prefs, ...updates };
-    this.userPreferences.set(prefs.id, updatedPrefs);
+    // Update existing preferences
+    const [updatedPrefs] = await db
+      .update(userPreferences)
+      .set(updates)
+      .where(eq(userPreferences.userId, userId))
+      .returning();
+    
     return updatedPrefs;
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();
