@@ -14,6 +14,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn, getInitials, formatTime } from "@/lib/utils";
+import { AnimatedEmoji, ReactionGrid, EmojiExplosion } from "./AnimatedEmoji";
 
 interface Reaction {
   id: number;
@@ -58,6 +59,10 @@ export function ChatMessage({
   const [showReactions, setShowReactions] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editedContent, setEditedContent] = useState(content);
+  const [showExplosion, setShowExplosion] = useState(false);
+  const [explosionPosition, setExplosionPosition] = useState({ x: 0, y: 0 });
+  const [selectedEmoji, setSelectedEmoji] = useState("");
+  const messageRef = useRef<HTMLDivElement>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -69,6 +74,17 @@ export function ChatMessage({
   const handleReact = (reaction: string) => {
     onReact(id, reaction);
     setShowReactions(false);
+    
+    // Get message position for the explosion effect
+    if (messageRef.current) {
+      const rect = messageRef.current.getBoundingClientRect();
+      setExplosionPosition({ 
+        x: isOwn ? rect.left : rect.right, 
+        y: rect.top 
+      });
+      setSelectedEmoji(reaction);
+      setShowExplosion(true);
+    }
   };
 
   const handleEditSubmit = () => {
@@ -174,10 +190,19 @@ export function ChatMessage({
   return (
     <div
       className={cn(
-        "flex items-end mb-4 animate-appear",
+        "flex items-end mb-4 animate-appear relative",
         isOwn ? "justify-end" : ""
       )}
     >
+      {/* Emoji explosion effect */}
+      {showExplosion && (
+        <EmojiExplosion 
+          emoji={selectedEmoji}
+          x={explosionPosition.x}
+          y={explosionPosition.y}
+          onComplete={() => setShowExplosion(false)}
+        />
+      )}
       {!isOwn && (
         <Avatar className="w-8 h-8 mr-2">
           {senderAvatar ? (
@@ -197,6 +222,7 @@ export function ChatMessage({
           {isOwn && <span className="text-xs text-gray-500 mr-2">{formatTime(sentAt)}</span>}
           
           <div
+            ref={messageRef}
             className={cn(
               "max-w-xs md:max-w-md py-2 px-4 text-sm shadow-sm",
               isOwn ? "chat-bubble-sent" : "chat-bubble-received",
@@ -214,8 +240,13 @@ export function ChatMessage({
           <div className={cn("flex mt-1 space-x-1", isOwn ? "justify-end" : "")}>
             {Object.entries(reactionCounts).map(([reaction, count]) => (
               <div key={reaction} className="bg-white rounded-full shadow-sm p-1 flex items-center">
-                <span className="text-sm">{reaction}</span>
-                {count > 1 && <span className="text-xs ml-1">{count}</span>}
+                <AnimatedEmoji 
+                  emoji={reaction} 
+                  size="sm" 
+                  count={count} 
+                  animation="wobble" 
+                  isStatic={true}
+                />
               </div>
             ))}
           </div>
@@ -276,19 +307,16 @@ export function ChatMessage({
             </Button>
           </PopoverTrigger>
           <PopoverContent className="p-1 w-auto">
-            <div className="flex space-x-1">
-              {commonReactions.map((reaction) => (
-                <Button
-                  key={reaction}
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 rounded-full hover:bg-gray-100"
-                  onClick={() => handleReact(reaction)}
-                >
-                  <span className="text-lg">{reaction}</span>
-                </Button>
-              ))}
-            </div>
+            <ReactionGrid 
+              reactions={[
+                ...commonReactions.map(emoji => ({ emoji })),
+                { emoji: "🎉" }, 
+                { emoji: "🔥" }, 
+                { emoji: "🙏" },
+                { emoji: "💯" }
+              ]} 
+              onSelectReaction={handleReact}
+            />
           </PopoverContent>
         </Popover>
       </div>

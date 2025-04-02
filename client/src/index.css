@@ -68,11 +68,13 @@
   
   /* Chat bubble styles */
   .chat-bubble-sent {
-    @apply bg-primary text-primary-foreground rounded-[18px] rounded-br-[0] shadow-sm;
+    @apply bg-primary text-primary-foreground rounded-[18px] rounded-br-[0] shadow-sm
+      transition-all duration-200 ease-in-out hover:shadow-md;
   }
 
   .chat-bubble-received {
-    @apply bg-muted text-muted-foreground rounded-[18px] rounded-bl-[0] shadow-sm;
+    @apply bg-muted text-muted-foreground rounded-[18px] rounded-bl-[0] shadow-sm
+      transition-all duration-200 ease-in-out hover:shadow-md;
   }
   
   /* Theme styles */
@@ -141,6 +143,25 @@
   
   .animate-appear {
     animation: appear 0.3s ease-out;
+  }
+  
+  /* Message reaction animations */
+  @keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.2); }
+  }
+  
+  @keyframes bounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+  }
+  
+  .reaction-pulse {
+    animation: pulse 0.5s ease-in-out;
+  }
+  
+  .reaction-bounce {
+    animation: bounce 0.8s ease-in-out;
   }
   
   /* Scrollbar customization */
