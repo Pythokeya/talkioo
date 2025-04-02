@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { EmojiPicker } from "@/components/ui/emoji-picker";
 import { StickerPicker } from "@/components/ui/sticker-picker";
+import { VoiceRecorder } from "./VoiceMessage";
 
 interface ChatInputProps {
   onSendMessage: (content: string, type: "text" | "sticker" | "gif" | "voice") => void;
@@ -12,6 +13,7 @@ interface ChatInputProps {
 export function ChatInput({ onSendMessage, disabled = false }: ChatInputProps) {
   const [message, setMessage] = useState("");
   const [isRecording, setIsRecording] = useState(false);
+  const [showRecorder, setShowRecorder] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleSendMessage = () => {
@@ -41,23 +43,33 @@ export function ChatInput({ onSendMessage, disabled = false }: ChatInputProps) {
     onSendMessage(stickerUrl, "sticker");
   };
 
-  const handleVoiceRecord = () => {
-    // Toggle recording state
-    setIsRecording(!isRecording);
+  const handleVoiceRecordingComplete = (audioBlob: Blob) => {
+    // Create a URL for the audio blob
+    const audioUrl = URL.createObjectURL(audioBlob);
     
-    // In a real implementation, this would handle voice recording
-    // For now, we'll just simulate toggling between recording and not recording
-    if (isRecording) {
-      // This would normally stop recording and send the voice message
-      console.log("Voice recording stopped");
-    } else {
-      // This would normally start recording
-      console.log("Voice recording started");
-    }
+    // Send the voice message
+    onSendMessage(audioUrl, "voice");
+    
+    // Hide the recorder UI
+    setShowRecorder(false);
+  };
+
+  const toggleVoiceRecorder = () => {
+    setShowRecorder(!showRecorder);
   };
 
   return (
     <div className="bg-white border-t border-gray-200 p-3">
+      {/* Voice recorder UI */}
+      {showRecorder && (
+        <div className="mb-3">
+          <VoiceRecorder 
+            onRecordingComplete={handleVoiceRecordingComplete} 
+            maxDuration={60}
+          />
+        </div>
+      )}
+      
       <div className="flex items-center">
         <EmojiPicker onEmojiSelect={handleEmojiSelect} />
         
@@ -78,11 +90,12 @@ export function ChatInput({ onSendMessage, disabled = false }: ChatInputProps) {
           <Button
             variant="ghost"
             size="icon"
-            className={`ml-2 text-gray-500 hover:text-primary ${isRecording ? 'text-destructive' : ''}`}
-            onClick={handleVoiceRecord}
+            className={`ml-2 text-gray-500 hover:text-primary ${showRecorder ? 'text-destructive' : ''}`}
+            onClick={toggleVoiceRecorder}
             disabled={disabled}
+            title={showRecorder ? "Cancel recording" : "Record voice message"}
           >
-            <span className="material-icons">{isRecording ? "stop_circle" : "mic"}</span>
+            <span className="material-icons">{showRecorder ? "close" : "mic"}</span>
           </Button>
         </div>
         

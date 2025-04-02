@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn, getInitials, formatTime } from "@/lib/utils";
 import { AnimatedEmoji, ReactionGrid, EmojiExplosion } from "./AnimatedEmoji";
+import { VoicePlayer } from "./VoiceMessage";
 
 interface Reaction {
   id: number;
@@ -170,11 +171,10 @@ export function ChatMessage({
         );
       case "voice":
         return (
-          <div className="flex items-center">
-            <span className="material-icons mr-2">play_arrow</span>
-            <div className="h-4 bg-current/20 w-24 rounded-full"></div>
-            <span className="ml-2 text-xs">0:08</span>
-          </div>
+          <VoicePlayer 
+            audioUrl={content} 
+            isOwn={isOwn}
+          />
         );
       default:
         return <p>{content}</p>;
