@@ -1,0 +1,19 @@
+{
+  "name": "talkiosphere",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.4.21",
+    "postcss": "^8.5.3",
+    "tailwindcss": "^4.1.1",
+    "vite": "^6.2.4"
+  },
+  "dependencies": {
+    "material-icons": "^1.13.14",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  }
+}
