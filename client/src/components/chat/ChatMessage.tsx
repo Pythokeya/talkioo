@@ -1,11 +1,18 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { 
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn, getInitials, formatTime } from "@/lib/utils";
 
 interface Reaction {
@@ -24,7 +31,11 @@ interface ChatMessageProps {
   senderName: string;
   senderAvatar?: string;
   reactions?: Reaction[];
+  isEdited?: boolean;
+  isDeleted?: boolean;
   onReact: (messageId: number, reaction: string) => void;
+  onEdit?: (messageId: number, newContent: string) => void;
+  onDelete?: (messageId: number) => void;
 }
 
 const commonReactions = ["👍", "❤️", "😂", "😮", "👏"];
@@ -38,19 +49,100 @@ export function ChatMessage({
   senderName,
   senderAvatar,
   reactions = [],
+  isEdited = false,
+  isDeleted = false,
   onReact,
+  onEdit,
+  onDelete,
 }: ChatMessageProps) {
   const [showReactions, setShowReactions] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedContent, setEditedContent] = useState(content);
+  const editInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isEditing && editInputRef.current) {
+      editInputRef.current.focus();
+    }
+  }, [isEditing]);
 
   const handleReact = (reaction: string) => {
     onReact(id, reaction);
     setShowReactions(false);
   };
 
+  const handleEditSubmit = () => {
+    if (onEdit && editedContent.trim() !== "" && editedContent !== content) {
+      onEdit(id, editedContent);
+    }
+    setIsEditing(false);
+  };
+
+  // Check if message is eligible for editing (30 min window)
+  const canEdit = () => {
+    if (!isOwn || !onEdit || isDeleted || type !== "text") return false;
+    const now = new Date();
+    const messageTime = new Date(sentAt);
+    const timeDiffMinutes = (now.getTime() - messageTime.getTime()) / (1000 * 60);
+    return timeDiffMinutes <= 30;
+  };
+
+  // Check if message is eligible for deletion (10 min window)
+  const canDelete = () => {
+    if (!isOwn || !onDelete || isDeleted) return false;
+    const now = new Date();
+    const messageTime = new Date(sentAt);
+    const timeDiffMinutes = (now.getTime() - messageTime.getTime()) / (1000 * 60);
+    return timeDiffMinutes <= 10;
+  };
+
   const renderContent = () => {
+    if (isDeleted) {
+      return <p className="italic text-muted-foreground">This message was deleted</p>;
+    }
+
+    if (isEditing && type === "text") {
+      return (
+        <form onSubmit={(e) => { e.preventDefault(); handleEditSubmit(); }} className="flex w-full">
+          <Input
+            ref={editInputRef}
+            value={editedContent}
+            onChange={(e) => setEditedContent(e.target.value)}
+            className="min-w-[200px]"
+          />
+          <Button 
+            type="submit" 
+            size="sm" 
+            variant="ghost"
+            className="ml-2"
+          >
+            <span className="material-icons text-sm">done</span>
+          </Button>
+          <Button 
+            type="button" 
+            size="sm" 
+            variant="ghost"
+            className="ml-1"
+            onClick={() => { setIsEditing(false); setEditedContent(content); }}
+          >
+            <span className="material-icons text-sm">close</span>
+          </Button>
+        </form>
+      );
+    }
+
     switch (type) {
       case "text":
-        return <p>{content}</p>;
+        return (
+          <div>
+            <p>{content}</p>
+            {isEdited && (
+              <span className="text-xs text-muted-foreground italic ml-1">
+                (edited)
+              </span>
+            )}
+          </div>
+        );
       case "sticker":
       case "gif":
         return (
@@ -130,36 +222,76 @@ export function ChatMessage({
         )}
       </div>
 
-      {/* Reaction button */}
-      <Popover open={showReactions} onOpenChange={setShowReactions}>
-        <PopoverTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon"
-            className={cn(
-              "h-6 w-6 rounded-full text-gray-400 hover:text-gray-500 hover:bg-gray-100",
-              isOwn ? "mr-2" : "ml-2"
-            )}
-          >
-            <span className="material-icons text-sm">add_reaction</span>
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="p-1 w-auto">
-          <div className="flex space-x-1">
-            {commonReactions.map((reaction) => (
+      {/* Message actions */}
+      <div className="flex">
+        {/* Edit/Delete menu (only for own messages) */}
+        {isOwn && !isEditing && (canEdit() || canDelete()) && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
               <Button
-                key={reaction}
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8 rounded-full hover:bg-gray-100"
-                onClick={() => handleReact(reaction)}
+                className={cn(
+                  "h-6 w-6 rounded-full text-gray-400 hover:text-gray-500 hover:bg-gray-100"
+                )}
               >
-                <span className="text-lg">{reaction}</span>
+                <span className="material-icons text-sm">more_vert</span>
               </Button>
-            ))}
-          </div>
-        </PopoverContent>
-      </Popover>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-40">
+              {canEdit() && (
+                <DropdownMenuItem 
+                  onClick={() => setIsEditing(true)}
+                  className="cursor-pointer"
+                >
+                  <span className="material-icons text-sm mr-2">edit</span>
+                  Edit
+                </DropdownMenuItem>
+              )}
+              {canDelete() && (
+                <DropdownMenuItem 
+                  onClick={() => onDelete && onDelete(id)}
+                  className="text-red-500 cursor-pointer focus:text-red-500"
+                >
+                  <span className="material-icons text-sm mr-2">delete</span>
+                  Delete
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+
+        {/* Reaction button */}
+        <Popover open={showReactions} onOpenChange={setShowReactions}>
+          <PopoverTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className={cn(
+                "h-6 w-6 rounded-full text-gray-400 hover:text-gray-500 hover:bg-gray-100",
+                isOwn ? "mr-2" : "ml-2"
+              )}
+            >
+              <span className="material-icons text-sm">add_reaction</span>
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="p-1 w-auto">
+            <div className="flex space-x-1">
+              {commonReactions.map((reaction) => (
+                <Button
+                  key={reaction}
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 rounded-full hover:bg-gray-100"
+                  onClick={() => handleReact(reaction)}
+                >
+                  <span className="text-lg">{reaction}</span>
+                </Button>
+              ))}
+            </div>
+          </PopoverContent>
+        </Popover>
+      </div>
     </div>
   );
 }

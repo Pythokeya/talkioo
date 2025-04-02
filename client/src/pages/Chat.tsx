@@ -26,6 +26,10 @@ interface Message {
   type: "text" | "sticker" | "gif" | "voice";
   sentAt: Date;
   isRead: boolean;
+  isEdited?: boolean;
+  editedAt?: Date;
+  isDeleted?: boolean;
+  deletedAt?: Date;
   reactions?: Array<{
     id: number;
     messageId: number;
@@ -95,10 +99,50 @@ export default function Chat({ friendId }: ChatProps) {
           );
         }
       });
+
+      // Listen for edited messages
+      const editHandler = chatWebSocket.onMessage("messageEdited", (data) => {
+        if (data.messageId) {
+          setMessages((prev) =>
+            prev.map((msg) => {
+              if (msg.id === data.messageId) {
+                return {
+                  ...msg,
+                  content: data.content,
+                  isEdited: true,
+                  editedAt: data.editedAt
+                };
+              }
+              return msg;
+            })
+          );
+        }
+      });
+
+      // Listen for deleted messages
+      const deleteHandler = chatWebSocket.onMessage("messageDeleted", (data) => {
+        if (data.messageId) {
+          setMessages((prev) =>
+            prev.map((msg) => {
+              if (msg.id === data.messageId) {
+                return {
+                  ...msg,
+                  content: "This message was deleted",
+                  isDeleted: true,
+                  deletedAt: data.deletedAt
+                };
+              }
+              return msg;
+            })
+          );
+        }
+      });
       
       return () => {
         messageHandler();
         reactionHandler();
+        editHandler();
+        deleteHandler();
       };
     }
   }, [user, friendId]);
@@ -151,6 +195,50 @@ export default function Chat({ friendId }: ChatProps) {
           return {
             ...msg,
             reactions: [...(msg.reactions || []), newReaction],
+          };
+        }
+        return msg;
+      })
+    );
+  };
+
+  const handleEditMessage = (messageId: number, newContent: string) => {
+    if (!user) return;
+    
+    // Send edit via WebSocket
+    chatWebSocket.editMessage(messageId, newContent);
+    
+    // Optimistically update message in UI
+    setMessages((prev) =>
+      prev.map((msg) => {
+        if (msg.id === messageId) {
+          return {
+            ...msg,
+            content: newContent,
+            isEdited: true,
+            editedAt: new Date()
+          };
+        }
+        return msg;
+      })
+    );
+  };
+
+  const handleDeleteMessage = (messageId: number) => {
+    if (!user) return;
+    
+    // Send delete via WebSocket
+    chatWebSocket.deleteMessage(messageId);
+    
+    // Optimistically update message in UI
+    setMessages((prev) =>
+      prev.map((msg) => {
+        if (msg.id === messageId) {
+          return {
+            ...msg,
+            content: "This message was deleted",
+            isDeleted: true,
+            deletedAt: new Date()
           };
         }
         return msg;
@@ -240,7 +328,11 @@ export default function Chat({ friendId }: ChatProps) {
                       senderName={message.senderId === user?.id ? user.username : friend?.username || ""}
                       senderAvatar={message.senderId === user?.id ? user.profilePicture : friend?.profilePicture}
                       reactions={message.reactions}
+                      isEdited={message.isEdited}
+                      isDeleted={message.isDeleted}
                       onReact={handleReactToMessage}
+                      onEdit={handleEditMessage}
+                      onDelete={handleDeleteMessage}
                     />
                   ))}
                 </div>

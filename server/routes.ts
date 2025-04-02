@@ -9,7 +9,9 @@ import {
   friendRequestSchema,
   insertMessageSchema,
   insertMessageReactionSchema,
-  insertUserPreferenceSchema
+  insertUserPreferenceSchema,
+  editMessageSchema,
+  deleteMessageSchema
 } from "@shared/schema";
 import session from "express-session";
 import MemoryStore from "memorystore";
@@ -425,6 +427,102 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Message edit route
+  app.put("/api/messages/:messageId", isAuthenticated, async (req, res) => {
+    const userId = (req.user as any).id;
+    const messageId = parseInt(req.params.messageId);
+    
+    try {
+      const validatedData = editMessageSchema.parse({
+        messageId,
+        ...req.body
+      });
+      
+      const updatedMessage = await storage.editMessage(
+        validatedData.messageId,
+        validatedData.content,
+        userId
+      );
+      
+      if (!updatedMessage) {
+        return res.status(400).json({
+          message: "Cannot edit message. Messages can only be edited within 30 minutes of sending and only by the sender."
+        });
+      }
+      
+      // Get the reactions for the updated message
+      const reactions = await storage.getMessageReactions(updatedMessage.id);
+      
+      // Find the receiver ID to notify via WebSocket
+      const receiverId = updatedMessage.receiverId;
+      
+      // Notify the receiver via WebSocket if they're online
+      if (receiverId) {
+        const receiverWs = connectedClients.get(receiverId);
+        if (receiverWs && receiverWs.readyState === WebSocket.OPEN) {
+          receiverWs.send(JSON.stringify({
+            type: 'messageEdited',
+            data: {
+              ...updatedMessage,
+              reactions
+            }
+          }));
+        }
+      }
+      
+      res.status(200).json({
+        ...updatedMessage,
+        reactions
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
+      res.status(500).json({ message: "Error editing message", error: (error as Error).message });
+    }
+  });
+  
+  // Message delete route
+  app.delete("/api/messages/:messageId", isAuthenticated, async (req, res) => {
+    const userId = (req.user as any).id;
+    const messageId = parseInt(req.params.messageId);
+    
+    try {
+      const validatedData = deleteMessageSchema.parse({ messageId });
+      
+      const success = await storage.deleteMessage(validatedData.messageId, userId);
+      
+      if (!success) {
+        return res.status(400).json({
+          message: "Cannot delete message. Messages can only be deleted within 10 minutes of sending and only by the sender."
+        });
+      }
+      
+      // Get the message to find the receiver
+      const message = await storage.getMessage(messageId);
+      
+      if (message && message.receiverId) {
+        // Notify the receiver via WebSocket if they're online
+        const receiverWs = connectedClients.get(message.receiverId);
+        if (receiverWs && receiverWs.readyState === WebSocket.OPEN) {
+          receiverWs.send(JSON.stringify({
+            type: 'messageDeleted',
+            data: {
+              messageId
+            }
+          }));
+        }
+      }
+      
+      res.status(200).json({ success: true, message: "Message deleted successfully" });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
+      res.status(500).json({ message: "Error deleting message", error: (error as Error).message });
+    }
+  });
+
   // Preference routes
   app.get("/api/preferences", isAuthenticated, async (req, res) => {
     const userId = (req.user as any).id;
@@ -692,9 +790,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const savedReaction = await storage.addReactionToMessage(parsedReaction);
             
             // Get the message to determine recipient
-            const message = await storage.getUser(messageId);
-            const recipientId = message ? 
-              (message.senderId === ws.userId ? message.receiverId : message.senderId) : 
+            const targetMessage = await storage.getMessage(messageId);
+            const recipientId = targetMessage ? 
+              (targetMessage.senderId === ws.userId ? targetMessage.receiverId : targetMessage.senderId) : 
               null;
             
             if (recipientId) {
@@ -718,6 +816,118 @@ export async function registerRoutes(app: Express): Promise<Server> {
             ws.send(JSON.stringify({
               type: 'error',
               data: { message: 'Failed to add reaction', error: (error as Error).message }
+            }));
+          }
+        } else if (message.type === 'editMessage' && ws.userId) {
+          // Handle message editing
+          try {
+            const { messageId, content } = message.data;
+            
+            // Validate message edit
+            const parsedEdit = editMessageSchema.parse({
+              messageId,
+              content
+            });
+            
+            // Update the message
+            const editedMessage = await storage.editMessage(
+              parsedEdit.messageId, 
+              parsedEdit.content, 
+              ws.userId
+            );
+            
+            if (!editedMessage) {
+              ws.send(JSON.stringify({
+                type: 'error',
+                data: { 
+                  message: 'Cannot edit message. Messages can only be edited within 30 minutes of sending and only by the sender.' 
+                }
+              }));
+              return;
+            }
+            
+            // Get reactions for the message
+            const reactions = await storage.getMessageReactions(messageId);
+            
+            // Notify the recipient if they're online
+            if (editedMessage.receiverId) {
+              const recipientWs = connectedClients.get(editedMessage.receiverId);
+              if (recipientWs && recipientWs.readyState === WebSocket.OPEN) {
+                recipientWs.send(JSON.stringify({
+                  type: 'messageEdited',
+                  data: {
+                    ...editedMessage,
+                    reactions
+                  }
+                }));
+              }
+            }
+            
+            // Send confirmation to sender
+            ws.send(JSON.stringify({
+              type: 'messageEditConfirmed',
+              data: {
+                ...editedMessage,
+                reactions
+              }
+            }));
+          } catch (error) {
+            ws.send(JSON.stringify({
+              type: 'error',
+              data: { message: 'Failed to edit message', error: (error as Error).message }
+            }));
+          }
+        } else if (message.type === 'deleteMessage' && ws.userId) {
+          // Handle message deletion
+          try {
+            const { messageId } = message.data;
+            
+            // Validate message deletion
+            const parsedDelete = deleteMessageSchema.parse({
+              messageId
+            });
+            
+            // Get the message before deleting to determine recipient
+            const targetMessage = await storage.getMessage(messageId);
+            const recipientId = targetMessage?.receiverId;
+            
+            // Delete the message
+            const success = await storage.deleteMessage(parsedDelete.messageId, ws.userId);
+            
+            if (!success) {
+              ws.send(JSON.stringify({
+                type: 'error',
+                data: { 
+                  message: 'Cannot delete message. Messages can only be deleted within 10 minutes of sending and only by the sender.' 
+                }
+              }));
+              return;
+            }
+            
+            // Notify the recipient if they're online
+            if (recipientId) {
+              const recipientWs = connectedClients.get(recipientId);
+              if (recipientWs && recipientWs.readyState === WebSocket.OPEN) {
+                recipientWs.send(JSON.stringify({
+                  type: 'messageDeleted',
+                  data: {
+                    messageId
+                  }
+                }));
+              }
+            }
+            
+            // Send confirmation to sender
+            ws.send(JSON.stringify({
+              type: 'messageDeleteConfirmed',
+              data: {
+                messageId
+              }
+            }));
+          } catch (error) {
+            ws.send(JSON.stringify({
+              type: 'error',
+              data: { message: 'Failed to delete message', error: (error as Error).message }
             }));
           }
         }

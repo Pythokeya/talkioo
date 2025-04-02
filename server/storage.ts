@@ -56,6 +56,9 @@ export interface IStorage {
   getGroupMessages(groupId: number, limit?: number): Promise<Message[]>;
   markMessageAsRead(messageId: number): Promise<void>;
   getUnreadMessageCount(userId: number): Promise<number>;
+  getMessage(messageId: number): Promise<Message | undefined>;
+  editMessage(messageId: number, content: string, userId: number): Promise<Message | null>;
+  deleteMessage(messageId: number, userId: number): Promise<boolean>;
   
   // Message reaction operations
   addReactionToMessage(reaction: InsertMessageReaction): Promise<MessageReaction>;
@@ -372,6 +375,86 @@ export class DatabaseStorage implements IStorage {
       ));
     
     return unreadMessages.length;
+  }
+  
+  async getMessage(messageId: number): Promise<Message | undefined> {
+    const [message] = await db
+      .select()
+      .from(messages)
+      .where(eq(messages.id, messageId));
+    
+    return message;
+  }
+  
+  async editMessage(messageId: number, content: string, userId: number): Promise<Message | null> {
+    // Get the message first to check if it exists and belongs to the user
+    const message = await this.getMessage(messageId);
+    
+    if (!message) {
+      return null; // Message not found
+    }
+    
+    if (message.senderId !== userId) {
+      return null; // Not authorized to edit this message
+    }
+    
+    // Check if the message was sent within the last 30 minutes
+    const now = new Date();
+    // Handle potential null sentAt value
+    const sentAt = message.sentAt ? new Date(message.sentAt) : new Date();
+    const timeDifferenceMinutes = (now.getTime() - sentAt.getTime()) / (1000 * 60);
+    
+    if (timeDifferenceMinutes > 30) {
+      return null; // Cannot edit messages older than 30 minutes
+    }
+    
+    // Update the message
+    const [updatedMessage] = await db
+      .update(messages)
+      .set({
+        content,
+        isEdited: true,
+        editedAt: now
+      })
+      .where(eq(messages.id, messageId))
+      .returning();
+    
+    return updatedMessage;
+  }
+  
+  async deleteMessage(messageId: number, userId: number): Promise<boolean> {
+    // Get the message first to check if it exists and belongs to the user
+    const message = await this.getMessage(messageId);
+    
+    if (!message) {
+      return false; // Message not found
+    }
+    
+    if (message.senderId !== userId) {
+      return false; // Not authorized to delete this message
+    }
+    
+    // Check if the message was sent within the last 10 minutes (for "delete for everyone")
+    const now = new Date();
+    // Handle potential null sentAt value
+    const sentAt = message.sentAt ? new Date(message.sentAt) : new Date();
+    const timeDifferenceMinutes = (now.getTime() - sentAt.getTime()) / (1000 * 60);
+    
+    if (timeDifferenceMinutes > 10) {
+      return false; // Cannot delete messages older than 10 minutes
+    }
+    
+    // Mark the message as deleted rather than actually deleting it
+    await db
+      .update(messages)
+      .set({
+        isDeleted: true,
+        content: "This message was deleted",
+        deletedAt: now
+      })
+      .where(eq(messages.id, messageId));
+    
+    return true;
   }
 
   // Message reaction operations

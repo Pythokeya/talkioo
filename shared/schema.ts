@@ -61,6 +61,10 @@ export const messages = pgTable("messages", {
   type: messageTypeEnum("type").notNull().default('text'),
   sentAt: timestamp("sent_at", { mode: 'date' }).defaultNow(),
   isRead: boolean("is_read").default(false),
+  isEdited: boolean("is_edited").default(false),
+  editedAt: timestamp("edited_at", { mode: 'date' }),
+  isDeleted: boolean("is_deleted").default(false),
+  deletedAt: timestamp("deleted_at", { mode: 'date' }),
 });
 
 // Message reactions table
@@ -94,7 +98,15 @@ export const insertUserSchema = createInsertSchema(users).omit({ id: true });
 export const insertFriendshipSchema = createInsertSchema(friendships).omit({ id: true, createdAt: true });
 export const insertChatGroupSchema = createInsertSchema(chatGroups).omit({ id: true, createdAt: true });
 export const insertGroupMemberSchema = createInsertSchema(groupMembers).omit({ id: true, joinedAt: true });
-export const insertMessageSchema = createInsertSchema(messages).omit({ id: true, sentAt: true, isRead: true });
+export const insertMessageSchema = createInsertSchema(messages).omit({ 
+  id: true, 
+  sentAt: true, 
+  isRead: true, 
+  isEdited: true, 
+  editedAt: true, 
+  isDeleted: true, 
+  deletedAt: true 
+});
 export const insertMessageReactionSchema = createInsertSchema(messageReactions).omit({ id: true, createdAt: true });
 export const insertBlockedUserSchema = createInsertSchema(blockedUsers).omit({ id: true, createdAt: true });
 export const insertUserPreferenceSchema = createInsertSchema(userPreferences).omit({ id: true });
@@ -136,4 +148,13 @@ export const loginSchema = z.object({
 
 export const friendRequestSchema = z.object({
   uniqueId: z.string().min(1, "Friend's Unique ID is required"),
+});
+
+export const editMessageSchema = z.object({
+  messageId: z.number(),
+  content: z.string().min(1, "Message content is required"),
+});
+
+export const deleteMessageSchema = z.object({
+  messageId: z.number(),
 });

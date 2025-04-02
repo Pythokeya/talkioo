@@ -209,6 +209,19 @@ class ChatWebSocket {
       reaction,
     });
   }
+
+  public editMessage(messageId: number, content: string) {
+    return this.sendMessage("editMessage", {
+      messageId,
+      content
+    });
+  }
+
+  public deleteMessage(messageId: number) {
+    return this.sendMessage("deleteMessage", {
+      messageId
+    });
+  }
 }
 
 // Create a singleton instance
