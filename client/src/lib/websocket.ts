@@ -1,4 +1,5 @@
 import { apiRequest } from "./queryClient";
+import { getWebSocketUrl } from "./netlify-config";
 
 type MessageHandler = (data: any) => void;
 type ErrorHandler = (error: Event) => void;
@@ -36,8 +37,8 @@ class ChatWebSocket {
         this.socket.close();
       }
 
-      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const wsUrl = `${protocol}//${window.location.host}/ws`;
+      // Use the helper from netlify-config to get the proper WebSocket URL
+      const wsUrl = getWebSocketUrl();
 
       this.socket = new WebSocket(wsUrl);
 
@@ -178,7 +179,7 @@ class ChatWebSocket {
     } else {
       // Handle the failure case - notify the user or attempt to reestablish session
       console.error("Failed to reconnect after multiple attempts");
-      // Try to refresh user session
+      // Try to refresh user session using the apiRequest which will handle the API URL correctly
       apiRequest("GET", "/api/user")
         .then((res) => {
           if (res.ok && this.userId) {

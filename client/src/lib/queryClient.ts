@@ -1,4 +1,5 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { apiUrl, isNetlifyEnvironment } from "./netlify-config";
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
@@ -12,7 +13,10 @@ export async function apiRequest(
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
-  const res = await fetch(url, {
+  // Use the apiUrl helper when in Netlify environment
+  const apiEndpoint = isNetlifyEnvironment() ? apiUrl(url) : url;
+  
+  const res = await fetch(apiEndpoint, {
     method,
     headers: data ? { "Content-Type": "application/json" } : {},
     body: data ? JSON.stringify(data) : undefined,
@@ -29,7 +33,11 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
-    const res = await fetch(queryKey[0] as string, {
+    // Use the apiUrl helper for the first part of queryKey when in Netlify environment
+    const endpoint = queryKey[0] as string;
+    const apiEndpoint = isNetlifyEnvironment() ? apiUrl(endpoint) : endpoint;
+    
+    const res = await fetch(apiEndpoint, {
       credentials: "include",
     });
 
