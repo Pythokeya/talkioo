@@ -18,6 +18,7 @@ import MemoryStore from "memorystore";
 import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
 import bcrypt from "bcryptjs";
+import helmet from "helmet";
 
 // Type for websocket clients with user info
 interface WebSocketClient extends WebSocket {
@@ -33,6 +34,33 @@ interface WSMessage {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Add helmet for security in production environments
+  if (process.env.ENABLE_HELMET === 'true' || process.env.NODE_ENV === 'production') {
+    app.use(helmet({
+      contentSecurityPolicy: {
+        directives: {
+          // Adjust CSP for WebSockets
+          connectSrc: ["'self'", "ws:", "wss:"],
+          // Add other directives as needed
+          defaultSrc: ["'self'"],
+          scriptSrc: ["'self'", "'unsafe-inline'"],
+          styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+          fontSrc: ["'self'", "https://fonts.gstatic.com"],
+          imgSrc: ["'self'", "data:", "https:"],
+        },
+      },
+    }));
+  }
+  
+  // Health check endpoint
+  app.get('/health', (req, res) => {
+    res.status(200).json({
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime()
+    });
+  });
+  
   // Set up sessions
   const SessionStore = MemoryStore(session);
   app.use(
