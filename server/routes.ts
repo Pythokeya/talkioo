@@ -38,9 +38,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use(
     session({
       secret: process.env.SESSION_SECRET || "talkio-secret-key",
-      resave: false,
-      saveUninitialized: false,
-      cookie: { secure: process.env.NODE_ENV === "production", maxAge: 24 * 60 * 60 * 1000 },
+      resave: true,
+      saveUninitialized: true,
+      cookie: { 
+        secure: false, // Set to false to work in all environments - change to 'process.env.NODE_ENV === "production"' in production
+        maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days in milliseconds
+        httpOnly: true,
+        sameSite: 'lax'
+      },
       store: new SessionStore({
         checkPeriod: 86400000, // 24 hours in milliseconds
       }),
