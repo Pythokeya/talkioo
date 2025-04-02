@@ -273,19 +273,19 @@ export function ChatMessage({
               {canEdit() && (
                 <DropdownMenuItem 
                   onClick={() => setIsEditing(true)}
-                  className="cursor-pointer"
+                  className="cursor-pointer flex items-center"
                 >
                   <span className="material-icons text-sm mr-2">edit</span>
-                  Edit
+                  <span className="flex-1">Edit</span>
                 </DropdownMenuItem>
               )}
               {canDelete() && (
                 <DropdownMenuItem 
                   onClick={() => onDelete && onDelete(id)}
-                  className="text-red-500 cursor-pointer focus:text-red-500"
+                  className="text-red-500 cursor-pointer focus:text-red-500 flex items-center"
                 >
                   <span className="material-icons text-sm mr-2">delete</span>
-                  Delete
+                  <span className="flex-1">Delete</span>
                 </DropdownMenuItem>
               )}
             </DropdownMenuContent>

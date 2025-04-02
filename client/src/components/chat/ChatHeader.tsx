@@ -94,22 +94,22 @@ export function ChatHeader({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent className="w-48">
-            <DropdownMenuItem onClick={onSearch} className="cursor-pointer">
+            <DropdownMenuItem onClick={onSearch} className="cursor-pointer flex items-center">
               <span className="material-icons text-gray-600 mr-2 text-sm">search</span>
-              <span>Search in chat</span>
+              <span className="flex-1">Search in chat</span>
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={onMute} className="cursor-pointer">
+            <DropdownMenuItem onClick={onMute} className="cursor-pointer flex items-center">
               <span className="material-icons text-gray-600 mr-2 text-sm">notifications_off</span>
-              <span>Mute notifications</span>
+              <span className="flex-1">Mute notifications</span>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={onBlock} className="cursor-pointer text-destructive">
+            <DropdownMenuItem onClick={onBlock} className="cursor-pointer text-destructive flex items-center">
               <span className="material-icons text-destructive mr-2 text-sm">block</span>
-              <span>Block user</span>
+              <span className="flex-1">Block user</span>
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={onReport} className="cursor-pointer text-destructive">
+            <DropdownMenuItem onClick={onReport} className="cursor-pointer text-destructive flex items-center">
               <span className="material-icons text-destructive mr-2 text-sm">flag</span>
-              <span>Report</span>
+              <span className="flex-1">Report</span>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
