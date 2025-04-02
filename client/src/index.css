@@ -1,0 +1,162 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 97%;
+    --foreground: 224 71% 4%;
+    --card: 0 0% 100%;
+    --card-foreground: 224 71% 4%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 224 71% 4%;
+    --primary: 243 100% 69%;
+    --primary-foreground: 210 20% 98%;
+    --secondary: 15 80% 70%;
+    --secondary-foreground: 220 10% 98%;
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 8% 52%;
+    --accent: 173 80% 58%;
+    --accent-foreground: 210 20% 98%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 210 20% 98%;
+    --border: 220 13% 90%;
+    --input: 220 13% 90%;
+    --ring: 243 100% 69%;
+    --radius: 0.75rem;
+  }
+
+  .dark {
+    --background: 224 71% 4%;
+    --foreground: 210 20% 98%;
+    --card: 224 71% 8%;
+    --card-foreground: 210 20% 98%;
+    --popover: 224 71% 8%;
+    --popover-foreground: 210 20% 98%;
+    --primary: 243 100% 69%;
+    --primary-foreground: 210 20% 98%;
+    --secondary: 15 80% 70%;
+    --secondary-foreground: 210 20% 98%;
+    --muted: 215 28% 17%;
+    --muted-foreground: 217 10% 70%;
+    --accent: 173 80% 58%;
+    --accent-foreground: 210 20% 98%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 210 20% 98%;
+    --border: 215 28% 20%;
+    --input: 215 28% 20%;
+    --ring: 243 100% 69%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply font-nunito antialiased bg-background text-foreground;
+  }
+}
+
+@layer utilities {
+  .font-nunito {
+    font-family: 'Nunito', sans-serif;
+  }
+
+  .font-quicksand {
+    font-family: 'Quicksand', sans-serif;
+  }
+  
+  /* Chat bubble styles */
+  .chat-bubble-sent {
+    @apply bg-primary text-primary-foreground rounded-[18px] rounded-br-[0] shadow-sm;
+  }
+
+  .chat-bubble-received {
+    @apply bg-muted text-muted-foreground rounded-[18px] rounded-bl-[0] shadow-sm;
+  }
+  
+  /* Theme styles */
+  .theme-default {
+    --bubble-bg-sent: theme('colors.primary.DEFAULT');
+    --bubble-text-sent: theme('colors.primary.foreground');
+    --bubble-bg-received: theme('colors.muted.DEFAULT');
+    --bubble-text-received: theme('colors.muted.foreground');
+    --chat-bg: theme('colors.background');
+  }
+  
+  .theme-space {
+    --bubble-bg-sent: #3b3988;
+    --bubble-text-sent: white;
+    --bubble-bg-received: #1a1a2e;
+    --bubble-text-received: #e2e2e2;
+    --chat-bg: url('https://images.unsplash.com/photo-1506318137071-a8e063b4bec0?ixlib=rb-1.2.1&auto=format&fit=crop&w=1350&q=80');
+  }
+  
+  .theme-nature {
+    --bubble-bg-sent: #4CAF50;
+    --bubble-text-sent: white;
+    --bubble-bg-received: #A5D6A7;
+    --bubble-text-received: #1B5E20;
+    --chat-bg: url('https://images.unsplash.com/photo-1518173946687-a4c8892bbd9f?ixlib=rb-1.2.1&auto=format&fit=crop&w=1350&q=80');
+  }
+  
+  .theme-pastel {
+    --bubble-bg-sent: #FFB6C1;
+    --bubble-text-sent: #4A4A4A;
+    --bubble-bg-received: #B0E0E6;
+    --bubble-text-received: #4A4A4A;
+    --chat-bg: #FAFAFA;
+  }
+  
+  .theme-active.theme-default .chat-bg {
+    background-color: var(--chat-bg);
+  }
+  
+  .theme-active.theme-space .chat-bg,
+  .theme-active.theme-nature .chat-bg {
+    background-image: var(--chat-bg);
+    background-size: cover;
+    background-position: center;
+  }
+  
+  .theme-active.theme-pastel .chat-bg {
+    background-color: var(--chat-bg);
+  }
+  
+  .theme-active .chat-bubble-sent {
+    background-color: var(--bubble-bg-sent);
+    color: var(--bubble-text-sent);
+  }
+  
+  .theme-active .chat-bubble-received {
+    background-color: var(--bubble-bg-received);
+    color: var(--bubble-text-received);
+  }
+  
+  /* Animations */
+  @keyframes appear {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  
+  .animate-appear {
+    animation: appear 0.3s ease-out;
+  }
+  
+  /* Scrollbar customization */
+  ::-webkit-scrollbar {
+    width: 8px;
+  }
+  
+  ::-webkit-scrollbar-track {
+    @apply bg-muted/60;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    @apply bg-muted-foreground/40 rounded;
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground/60;
+  }
+}
