@@ -275,6 +275,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status: 'pending',
       });
       
+      // Get current user's details to send in the notification
+      const sender = await storage.getUser(userId);
+      
+      // Notify the friend via WebSocket if they're online
+      const friendWs = connectedClients.get(friend.id);
+      if (friendWs && friendWs.readyState === WebSocket.OPEN && sender) {
+        friendWs.send(JSON.stringify({
+          type: 'friendRequest',
+          data: {
+            requestId: friendRequest.id,
+            senderId: userId,
+            senderName: sender.username,
+            senderUniqueId: sender.uniqueId,
+            senderProfilePicture: sender.profilePicture,
+            createdAt: friendRequest.createdAt
+          }
+        }));
+      }
+      
       res.status(201).json({ message: "Friend request sent successfully" });
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -300,7 +319,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const friendshipId = parseInt(req.params.id);
     
     try {
+      // Update the friendship status
       const friendship = await storage.updateFriendshipStatus(friendshipId, 'accepted');
+      
+      // Get information about the request
+      const requests = await storage.getFriendRequests(userId);
+      const request = requests.find(r => r.id === friendshipId);
+      
+      if (request) {
+        // Get information about the user who is accepting the request
+        const user = await storage.getUser(userId);
+        
+        // Notify the sender via WebSocket if they're online
+        const senderWs = connectedClients.get(request.userId);
+        if (senderWs && senderWs.readyState === WebSocket.OPEN && user) {
+          senderWs.send(JSON.stringify({
+            type: 'friendRequestAccepted',
+            data: {
+              requestId: friendshipId,
+              friendId: userId,
+              friendName: user.username,
+              friendUniqueId: user.uniqueId,
+              friendProfilePicture: user.profilePicture
+            }
+          }));
+        }
+      }
+      
       res.status(200).json({ message: "Friend request accepted" });
     } catch (error) {
       res.status(500).json({ message: "Error accepting friend request", error: (error as Error).message });
@@ -312,7 +357,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const friendshipId = parseInt(req.params.id);
     
     try {
+      // Update the friendship status
       const friendship = await storage.updateFriendshipStatus(friendshipId, 'declined');
+      
+      // Get information about the request
+      const requests = await storage.getFriendRequests(userId);
+      const request = requests.find(r => r.id === friendshipId);
+      
+      if (request) {
+        // Notify the sender via WebSocket if they're online
+        const senderWs = connectedClients.get(request.userId);
+        if (senderWs && senderWs.readyState === WebSocket.OPEN) {
+          senderWs.send(JSON.stringify({
+            type: 'friendRequestDeclined',
+            data: {
+              requestId: friendshipId
+            }
+          }));
+        }
+      }
+      
       res.status(200).json({ message: "Friend request declined" });
     } catch (error) {
       res.status(500).json({ message: "Error declining friend request", error: (error as Error).message });

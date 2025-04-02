@@ -213,4 +213,7 @@ class ChatWebSocket {
 
 // Create a singleton instance
 const chatWebSocket = new ChatWebSocket();
+// default export for direct import
 export default chatWebSocket;
+// named export for destructuring import
+export { chatWebSocket };

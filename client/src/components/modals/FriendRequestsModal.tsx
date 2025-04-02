@@ -1,16 +1,28 @@
-import { useState, useEffect } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from "@/components/ui/dialog";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { FriendRequestItem } from "@/components/chat/FriendRequestItem";
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
-import { queryClient } from "@/lib/queryClient";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { getInitials } from "@/lib/utils";
+
+interface FriendRequestsModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
 
 interface FriendRequest {
   id: number;
-  userId: number;
-  friendId: number;
+  senderId: number;
+  receiverId: number;
   status: string;
   createdAt: string;
   user: {
@@ -21,99 +33,168 @@ interface FriendRequest {
   };
 }
 
-interface FriendRequestsModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-}
-
 export function FriendRequestsModal({ isOpen, onClose }: FriendRequestsModalProps) {
-  const [requests, setRequests] = useState<FriendRequest[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [pendingAction, setPendingAction] = useState<number | null>(null);
 
-  useEffect(() => {
-    if (isOpen) {
-      fetchFriendRequests();
-    }
-  }, [isOpen]);
+  // Fetch friend requests
+  const { data: friendRequests, isLoading } = useQuery<FriendRequest[]>({
+    queryKey: ["/api/friends/requests"],
+    enabled: isOpen,
+  });
 
-  const fetchFriendRequests = async () => {
-    setIsLoading(true);
-    try {
-      const res = await apiRequest("GET", "/api/friends/requests");
-      const data: FriendRequest[] = await res.json();
-      setRequests(data);
-    } catch (error) {
+  // Accept friend request mutation
+  const acceptRequest = useMutation({
+    mutationFn: async (requestId: number) => {
+      const res = await apiRequest("PATCH", `/api/friends/requests/${requestId}`, {
+        status: "accepted",
+      });
+      return res.json();
+    },
+    onMutate: (requestId) => {
+      setPendingAction(requestId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/friends/requests"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/friends"] });
+      toast({
+        title: "Friend request accepted",
+        description: "You are now friends!",
+      });
+    },
+    onError: (error) => {
       toast({
         title: "Error",
-        description: "Failed to load friend requests. Please try again.",
+        description: "Could not accept friend request",
         variant: "destructive",
       });
-      console.error("Failed to fetch friend requests:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    },
+    onSettled: () => {
+      setPendingAction(null);
+    },
+  });
 
-  const handleAcceptRequest = (id: number) => {
-    setRequests((prev) => prev.filter((request) => request.id !== id));
-    // Invalidate friends query to refresh the friends list
-    queryClient.invalidateQueries({ queryKey: ["/api/friends"] });
-  };
-
-  const handleDeclineRequest = (id: number) => {
-    setRequests((prev) => prev.filter((request) => request.id !== id));
-  };
+  // Decline friend request mutation
+  const declineRequest = useMutation({
+    mutationFn: async (requestId: number) => {
+      const res = await apiRequest("PATCH", `/api/friends/requests/${requestId}`, {
+        status: "declined",
+      });
+      return res.json();
+    },
+    onMutate: (requestId) => {
+      setPendingAction(requestId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/friends/requests"] });
+      toast({
+        title: "Friend request declined",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: "Could not decline friend request",
+        variant: "destructive",
+      });
+    },
+    onSettled: () => {
+      setPendingAction(null);
+    },
+  });
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-md">
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle className="text-lg font-bold text-gray-800">Friend Requests</DialogTitle>
-          <DialogClose className="absolute top-4 right-4 text-gray-500">
-            <span className="material-icons">close</span>
-          </DialogClose>
+          <DialogTitle>Friend Requests</DialogTitle>
         </DialogHeader>
-        
-        <ScrollArea className="max-h-[60vh]">
-          <div className="space-y-4 mb-4 p-1">
-            {isLoading ? (
-              // Loading skeletons
-              Array(2).fill(0).map((_, index) => (
-                <div key={index} className="flex items-center justify-between bg-gray-50 p-3 rounded-lg">
-                  <div className="flex items-center">
-                    <Skeleton className="w-10 h-10 rounded-full" />
-                    <div className="ml-3 space-y-1">
-                      <Skeleton className="h-4 w-24" />
-                      <Skeleton className="h-3 w-16" />
+
+        <div className="mt-2">
+          {isLoading ? (
+            // Loading skeleton
+            <div className="space-y-4">
+              {Array(3)
+                .fill(0)
+                .map((_, i) => (
+                  <div key={i} className="flex items-center justify-between">
+                    <div className="flex items-center">
+                      <Skeleton className="h-10 w-10 rounded-full" />
+                      <div className="ml-3">
+                        <Skeleton className="h-4 w-28 mb-1" />
+                        <Skeleton className="h-3 w-20" />
+                      </div>
+                    </div>
+                    <div className="flex space-x-2">
+                      <Skeleton className="h-8 w-16" />
+                      <Skeleton className="h-8 w-16" />
                     </div>
                   </div>
-                  <div className="flex space-x-2">
-                    <Skeleton className="h-8 w-16" />
-                    <Skeleton className="h-8 w-16" />
+                ))}
+            </div>
+          ) : friendRequests && friendRequests.length > 0 ? (
+            <ScrollArea className="max-h-80">
+              <div className="space-y-4">
+                {friendRequests.map((request) => (
+                  <div key={request.id} className="flex items-center justify-between p-2 border rounded-lg">
+                    <div className="flex items-center">
+                      <Avatar>
+                        {request.user.profilePicture ? (
+                          <AvatarImage src={request.user.profilePicture} alt={request.user.username} />
+                        ) : (
+                          <AvatarFallback className="bg-primary text-primary-foreground">
+                            {getInitials(request.user.username)}
+                          </AvatarFallback>
+                        )}
+                      </Avatar>
+                      <div className="ml-3">
+                        <p className="font-semibold">{request.user.username}</p>
+                        <p className="text-xs text-gray-500">@{request.user.uniqueId}</p>
+                      </div>
+                    </div>
+                    <div className="flex space-x-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-red-500 border-red-200 hover:bg-red-50 hover:text-red-600"
+                        onClick={() => declineRequest.mutate(request.id)}
+                        disabled={pendingAction === request.id}
+                      >
+                        {pendingAction === request.id && declineRequest.isPending ? (
+                          <span className="animate-pulse">...</span>
+                        ) : (
+                          "Decline"
+                        )}
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={() => acceptRequest.mutate(request.id)}
+                        disabled={pendingAction === request.id}
+                      >
+                        {pendingAction === request.id && acceptRequest.isPending ? (
+                          <span className="animate-pulse">...</span>
+                        ) : (
+                          "Accept"
+                        )}
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              ))
-            ) : requests.length > 0 ? (
-              requests.map((request) => (
-                <FriendRequestItem
-                  key={request.id}
-                  id={request.id}
-                  username={request.user.username}
-                  uniqueId={request.user.uniqueId}
-                  profilePicture={request.user.profilePicture}
-                  onAccept={handleAcceptRequest}
-                  onDecline={handleDeclineRequest}
-                />
-              ))
-            ) : (
-              <div className="text-center py-8 text-gray-500">
-                <span className="material-icons text-4xl mb-2">notifications_none</span>
-                <p>No friend requests yet</p>
+                ))}
               </div>
-            )}
-          </div>
-        </ScrollArea>
+            </ScrollArea>
+          ) : (
+            <div className="text-center py-8 text-gray-500">
+              <div className="mb-4 mx-auto w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center">
+                <span className="material-icons text-gray-400 text-2xl">person_add_disabled</span>
+              </div>
+              <p>No pending friend requests</p>
+              <p className="text-sm mt-1">
+                When someone sends you a request, it will appear here.
+              </p>
+            </div>
+          )}
+        </div>
       </DialogContent>
     </Dialog>
   );

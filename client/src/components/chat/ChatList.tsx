@@ -116,9 +116,9 @@ export function ChatList({
                 <li key={contact.id}>
                   <Link href={`/chat/${contact.id}`}>
                     <a className={cn(
-                      "p-2 rounded-lg flex items-center cursor-pointer",
+                      "p-2 rounded-lg flex items-center cursor-pointer group transition-colors",
                       activeContactId === contact.id 
-                        ? "bg-primary bg-opacity-10" 
+                        ? "bg-primary/10" 
                         : "hover:bg-gray-100"
                     )}>
                       <div className="relative">
@@ -138,9 +138,9 @@ export function ChatList({
                       </div>
                       <div className="ml-3 flex-1">
                         <div className="flex justify-between">
-                          <span className="font-semibold text-gray-800">{contact.username}</span>
+                          <span className="font-semibold text-gray-800 group-hover:text-gray-900">{contact.username}</span>
                           {contact.lastMessage && (
-                            <span className="text-xs text-gray-500">
+                            <span className="text-xs text-gray-500 group-hover:text-gray-700">
                               {new Date(contact.lastMessage.timestamp).toLocaleTimeString([], {
                                 hour: '2-digit',
                                 minute: '2-digit',
@@ -150,7 +150,7 @@ export function ChatList({
                           )}
                         </div>
                         {contact.lastMessage && (
-                          <p className="text-sm text-gray-600 truncate">
+                          <p className="text-sm text-gray-600 group-hover:text-gray-700 truncate">
                             {truncateText(contact.lastMessage.content, 30)}
                           </p>
                         )}

@@ -1,32 +1,40 @@
 import { useState, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import MainLayout from "@/components/layouts/MainLayout";
 import { ChatList, type ChatContact, type ChatGroup } from "@/components/chat/ChatList";
 import { FriendRequestsModal } from "@/components/modals/FriendRequestsModal";
+import { AddFriendModal } from "@/components/modals/AddFriendModal";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/use-auth";
-import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import chatWebSocket from "@/lib/websocket";
 
 export default function Home() {
   const { user } = useAuth();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [showFriendRequests, setShowFriendRequests] = useState(false);
+  const [showAddFriendModal, setShowAddFriendModal] = useState(false);
   const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
   
   // Fetch friends list
-  const { data: friends, isLoading } = useQuery({
+  const { data: friends = [], isLoading } = useQuery<any[]>({
     queryKey: ["/api/friends"],
     enabled: !!user,
   });
   
   // Fetch pending friend requests
-  const { data: friendRequests } = useQuery({
+  const { data: friendRequests = [] } = useQuery<any[]>({
     queryKey: ["/api/friends/requests"],
     enabled: !!user,
-    onSuccess: (data) => {
-      setPendingRequestsCount(data.length);
-    },
   });
+  
+  // Update pending request count when data changes
+  useEffect(() => {
+    if (friendRequests) {
+      setPendingRequestsCount(friendRequests.length);
+    }
+  }, [friendRequests]);
   
   // Connect to WebSocket when component mounts and user is authenticated
   useEffect(() => {
@@ -34,16 +42,28 @@ export default function Home() {
       chatWebSocket.connect(user.id).catch(console.error);
       
       // Listen for new friend requests
-      const unsubscribe = chatWebSocket.onMessage("friendRequest", () => {
+      const unsubscribeFriendRequest = chatWebSocket.onMessage("friendRequest", (data) => {
         // Refresh friend requests count
         queryClient.invalidateQueries({ queryKey: ["/api/friends/requests"] });
+        
+        // Show notification
+        toast({
+          title: "New Friend Request",
+          description: `${data.senderName} would like to connect with you`,
+        });
+      });
+      
+      // Listen for other relevant events
+      const unsubscribeOnlineStatus = chatWebSocket.onMessage("userOnlineStatus", () => {
+        queryClient.invalidateQueries({ queryKey: ["/api/friends"] });
       });
       
       return () => {
-        unsubscribe();
+        unsubscribeFriendRequest();
+        unsubscribeOnlineStatus();
       };
     }
-  }, [user]);
+  }, [user, queryClient, toast]);
   
   // Format friends data for ChatList component
   const formattedContacts: ChatContact[] = friends?.map((friend: any) => ({
@@ -55,25 +75,13 @@ export default function Home() {
     // In a real app, you would also fetch last messages for each contact
   })) || [];
   
-  // Mock groups for initial display
-  // In a real app, these would be fetched from the API
-  const mockGroups: ChatGroup[] = [
-    {
-      id: 1,
-      name: "Family Group",
-      memberCount: 5,
-    },
-    {
-      id: 2,
-      name: "Book Lovers",
-      memberCount: 12,
-    },
-    {
-      id: 3,
-      name: "Pet Owners",
-      memberCount: 8,
-    },
-  ];
+  // Empty groups array as requested (no default groups)
+  const groups: ChatGroup[] = [];
+
+  // Function to handle Add Friend button click
+  const handleAddFriendClick = () => {
+    setShowAddFriendModal(true);
+  };
 
   return (
     <MainLayout>
@@ -101,7 +109,7 @@ export default function Home() {
       ) : (
         <ChatList
           contacts={formattedContacts}
-          groups={mockGroups}
+          groups={groups}
           pendingRequestsCount={pendingRequestsCount}
           onShowFriendRequests={() => setShowFriendRequests(true)}
         />
@@ -113,21 +121,21 @@ export default function Home() {
           <div className="mb-6 mx-auto w-24 h-24 rounded-xl bg-primary/10 flex items-center justify-center">
             <span className="material-icons text-primary text-4xl">chat</span>
           </div>
-          <h1 className="text-2xl font-bold text-gray-800 mb-2 font-quicksand">Welcome to Talkio!</h1>
+          <h1 className="text-2xl font-bold text-gray-800 mb-2">Welcome to Talkio!</h1>
           <p className="text-gray-600 mb-6">
             Select a chat from the sidebar or start a new conversation by adding friends.
           </p>
           <div className="flex justify-center space-x-4">
             <button 
-              className="flex items-center px-4 py-2 bg-primary text-white rounded-lg"
-              onClick={() => setShowFriendRequests(true)}
+              className="flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
+              onClick={handleAddFriendClick}
             >
               <span className="material-icons mr-2">person_add</span>
-              Add Friends
+              <span className="whitespace-nowrap">Add Friends</span>
             </button>
-            <button className="flex items-center px-4 py-2 bg-secondary text-white rounded-lg">
+            <button className="flex items-center px-4 py-2 bg-secondary text-white rounded-lg hover:bg-secondary/90 transition-colors">
               <span className="material-icons mr-2">group_add</span>
-              Create Group
+              <span className="whitespace-nowrap">Create Group</span>
             </button>
           </div>
         </div>
@@ -139,16 +147,16 @@ export default function Home() {
           <div className="mb-4 mx-auto w-16 h-16 rounded-xl bg-primary/10 flex items-center justify-center">
             <span className="material-icons text-primary text-2xl">chat</span>
           </div>
-          <h1 className="text-xl font-bold text-gray-800 mb-2 font-quicksand">Welcome to Talkio!</h1>
+          <h1 className="text-xl font-bold text-gray-800 mb-2">Welcome to Talkio!</h1>
           <p className="text-sm text-gray-600 mb-4">
             Tap on a chat at the bottom or start a new conversation.
           </p>
           <button 
-            className="w-full flex items-center justify-center px-4 py-2 bg-primary text-white rounded-lg"
-            onClick={() => setShowFriendRequests(true)}
+            className="w-full flex items-center justify-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
+            onClick={handleAddFriendClick}
           >
             <span className="material-icons mr-2">person_add</span>
-            Add Friends
+            <span className="whitespace-nowrap">Add Friends</span>
           </button>
         </div>
       </div>
@@ -157,6 +165,11 @@ export default function Home() {
       <FriendRequestsModal
         isOpen={showFriendRequests}
         onClose={() => setShowFriendRequests(false)}
+      />
+      
+      <AddFriendModal 
+        isOpen={showAddFriendModal} 
+        onClose={() => setShowAddFriendModal(false)} 
       />
     </MainLayout>
   );
